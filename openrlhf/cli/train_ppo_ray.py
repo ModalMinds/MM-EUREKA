@@ -290,7 +290,7 @@ if __name__ == "__main__":
     # LoRA
     parser.add_argument("--load_in_4bit", action="store_true", default=False)
     parser.add_argument("--use_llm_lora", action="store_true", default=False, help="Enable LoRA for LLM")
-    parser.add_argument("--use_backbone_lora", action="store_true", default=False, help="Enable LoRA for backbone")
+    parser.add_argument("--ues_backbone_lora", action="store_true", default=False, help="Enable LoRA for backbone")
     parser.add_argument("--lora_rank", type=int, default=0)
     parser.add_argument("--lora_alpha", type=int, default=16)
     parser.add_argument("--target_modules", type=str, nargs="*", default="all-linear")

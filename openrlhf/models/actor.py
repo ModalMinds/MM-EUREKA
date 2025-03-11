@@ -65,6 +65,7 @@ class Actor(nn.Module):
             else:
                 dschf = None
 
+            assert not load_in_4bit
             if load_in_4bit:
                 assert bf16, "we only support bnb_4bit_compute_dtype = bf16"
                 nf4_config = BitsAndBytesConfig(
@@ -88,6 +89,7 @@ class Actor(nn.Module):
             tokenizer = AutoTokenizer.from_pretrained(pretrain_or_model, trust_remote_code=True)
             self.model.img_context_token_id = tokenizer.convert_tokens_to_ids(IMG_CONTEXT_TOKEN)
 
+            assert not lora_rank > 0
             # LoRA
             if lora_rank > 0:
                 if use_backbone_lora:
