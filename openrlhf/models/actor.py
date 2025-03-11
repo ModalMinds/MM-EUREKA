@@ -4,7 +4,6 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 from flash_attn.utils.distributed import all_gather
-from peft import LoraConfig, TaskType, get_peft_model
 from peft.tuners.lora import LoraLayer
 from torch.nn import functional as F
 from transformers import AutoTokenizer, BitsAndBytesConfig
@@ -43,6 +42,8 @@ class Actor(nn.Module):
         use_flash_attention_2=False,
         bf16=True,
         load_in_4bit=False,
+        use_llm_lora=False,
+        use_backbone_lora=False,
         lora_rank=0,
         lora_alpha=16,
         lora_dropout=0,
@@ -91,17 +92,12 @@ class Actor(nn.Module):
             assert not lora_rank > 0
             # LoRA
             if lora_rank > 0:
-                # https://github.com/huggingface/peft/issues/137
-                self.model.enable_input_require_grads()
-                lora_config = LoraConfig(
-                    task_type=TaskType.CAUSAL_LM,
-                    r=lora_rank,
-                    lora_alpha=lora_alpha,
-                    target_modules=target_modules,
-                    lora_dropout=lora_dropout,
-                    bias="none",
-                )
-                self.model = get_peft_model(self.model, lora_config)
+                if use_backbone_lora:
+                    self.model.wrap_backbone_lora(lora_rank, lora_alpha, lora_dropout)
+                    self.model.config.use_backbone_lora = lora_rank
+                if use_llm_lora:
+                    self.model.wrap_llm_lora(lora_rank, lora_alpha, lora_dropout)
+                    self.model.config.use_llm_lora = lora_rank
 
                 if load_in_4bit:
                     for name, module in self.model.named_modules():
