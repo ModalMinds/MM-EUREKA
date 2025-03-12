@@ -2,7 +2,6 @@ import argparse
 import json
 import os
 import random
-import re
 import time
 
 from transformers import AutoTokenizer
@@ -13,8 +12,8 @@ connector = MediaConnector(allowed_local_media_path="/")
 
 ds_collections = {
     "math_tiankong_test": {
-        "root": "",
-        "annotation": "",
+        "root": "eval/k12/",
+        "annotation": "eval/k12/k12.json",
     }
 }
 
@@ -26,24 +25,10 @@ def evaluate_chat_model():
         data = json.load(open(ds_collections[ds_name]["annotation"], encoding="utf-8"))
         inputs = []
         for data_item in data:
-            if "q_main_w_latex_en" in data_item:
-                question = re.sub(r"!\[[^\[\]]*\]\([^\(\)]*\)", "", data_item["q_main_w_latex_en"]).strip()
-
-                matches = re.findall(r"!\[[^\[\]]*\]\(([^\(\)]*)\)", data_item["q_main_w_latex_en"])
-                assert len(matches) == 1
-                image = connector.fetch_image(
-                    "file://"
-                    + os.path.join(ds_collections[ds_name]["root"], data_item["img_list"][matches[0]]["local_path"])
-                )
-            else:
-                question = re.sub(r"!\[[^\[\]]*\]\([^\(\)]*\)", "", data_item["q_main_en"]).strip()
-                image = connector.fetch_image(
-                    "file://"
-                    + os.path.join(
-                        ds_collections[ds_name]["root"],
-                        data_item["img_list"][list(data_item["img_list"].keys())[0]]["local_path"],
-                    )
-                )
+            question = data_item["question"]
+            image = connector.fetch_image(
+                "file://" + os.path.join(ds_collections[ds_name]["root"], data_item["image_path"])
+            )
 
             data_item["query"] = (
                 f"<image>\nAnswer the following question: {question}\nPlease reason step by step, and put your final answer within \\boxed{{}}."

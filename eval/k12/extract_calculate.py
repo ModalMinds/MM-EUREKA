@@ -2,7 +2,6 @@ import argparse
 import json
 import logging
 import os
-import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import openai
@@ -28,7 +27,7 @@ def get_chat_response(prompt, model="gpt-4o", max_token=256, retry=5):
 
 
 def build_zh_exam_k12_gpt4_prompt(question_data):
-    prompt = """You are given a question, the solution, the correct answer and answer details. Please determine if the solution matches the correct answer.
+    prompt = """You are given a question, the solution and the correct answer. Please determine if the solution matches the correct answer.
 Focus only on the mathematical or semantic correctness of the content. Ignore any differences in formatting, such as LaTeX syntax, symbols, styles, or additional wrappers (e.g., \boxed, $...$, or similar). Compare only the core mathematical or textual meaning of the solution and the correct answer.
 The process or reasoning leading to the Solution is irrelevant, ONLY the correctness of the result matters.
 Return only "Yes" if the solution is correct or "No" if it is incorrect.
@@ -40,23 +39,14 @@ Question:
 Correct Answer:
 {answer}
 --------------------------------
-Answer Details:
-{answer_detail}
---------------------------------
 Solution: 
 {solution}
 --------------------------------
 """
-    if "std_ans_w_latex_en" in question_data:
-        question = re.sub(r"!\[[^\[\]]*\]\([^\(\)]*\)", "", question_data["q_main_w_latex_en"]).strip()
-        answer = re.sub(r"!\[[^\[\]]*\]\([^\(\)]*\)", "", "".join(question_data["std_ans_w_latex_en"])).strip()
-        answer_detail = re.sub(r"!\[[^\[\]]*\]\([^\(\)]*\)", "", question_data["answer_detail_w_latex_en"]).strip()
-    else:
-        question = re.sub(r"!\[[^\[\]]*\]\([^\(\)]*\)", "", question_data["q_main_en"]).strip()
-        answer = re.sub(r"!\[[^\[\]]*\]\([^\(\)]*\)", "", "".join(question_data["std_ans_en"])).strip()
-        answer_detail = re.sub(r"!\[[^\[\]]*\]\([^\(\)]*\)", "", question_data["answer_detail_en"]).strip()
+    question = question_data["question"]
+    answer = question_data["answer"]
     response = str(question_data["response"])
-    prompt = prompt.format(question=question, answer=answer, answer_detail=answer_detail, solution=response)
+    prompt = prompt.format(question=question, answer=answer, solution=response)
     return prompt
 
 
