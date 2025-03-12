@@ -155,7 +155,11 @@ Before starting your own training, ensure that the paths in the provided trainin
 sh examples/scripts/train_mm_eureka_zero_38b_multi_node.sh
 ```
 
+### 📊 Evaluation
 
+We provide our **evaluation code** in the `eval/` directory. To customize the evaluation process for different models, use the `--prompt_template` argument to specify the appropriate prompt format.
+
+We also introduce the **K12 Math Dataset**, a curated set of 500 fill-in-the-blank mathematics questions covering concepts from middle to high school levels. The dataset can be found in the `eval/k12` directory
 
 ## ⭐ Starchart
 
