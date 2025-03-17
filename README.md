@@ -176,8 +176,9 @@ Please refer to `CONTRIBUTING.md` before you dive in！
 If you have any questions or would like to engage with our community, feel free to scan the QR code below to join our WeChat group.
 
 <div align="center">
-<img alt="MM-Eureka logo" src="https://github.com/user-attachments/assets/a04ebfef-9ac4-44ae-a07b-48586794903a" style="height: 400px;" />
+<img alt="MM-Eureka logo" src="docs/wechat_qr.png" style="height: 400px;" />
 </div>
+
 
 ## 🎓 Acknowledgements
 
