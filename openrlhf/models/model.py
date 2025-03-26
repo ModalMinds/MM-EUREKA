@@ -11,8 +11,9 @@ from transformers.integrations.deepspeed import HfDeepSpeedConfig
 
 from openrlhf.utils.logging_utils import init_logger
 
-from .ring_attn_utils import convert_ring_attn_params
+from .ring_attn_utils import convert_ring_attn_params, set_hacked_position_ids, clear_hacked_position_ids
 from .utils import reset_position_ids
+from openrlhf.models.lmm_kits.utils import get_generation_cls
 
 logger = init_logger(__name__)
 
@@ -73,13 +74,12 @@ def get_llm_for_sequence_regression(
     # Prioritize using the value_head_prefix in the model configuration.
     value_head_prefix = getattr(config, "value_head_prefix", value_head_prefix)
     logger.info(f"set value_head_prefix to `{value_head_prefix}`")
-
-    base_class = AutoModel._model_mapping[type(config)]
+    base_class = get_generation_cls(config)
     base_pretrained_class = base_class.__base__
     if model_type == "reward":
-        cls_class = _get_reward_model(base_pretrained_class, base_class, value_head_prefix, packing_samples)
+        cls_class = _get_reward_model(base_class, value_head_prefix, packing_samples)
     else:
-        cls_class = _get_critic_model(base_pretrained_class, base_class, value_head_prefix, packing_samples)
+        cls_class = _get_critic_model(base_class, value_head_prefix, packing_samples)
 
     # Note: dschf is defined in function scope to avoid global effects
     # https://huggingface.co/docs/transformers/main_classes/deepspeed#nontrainer-deepspeed-integration
@@ -156,13 +156,12 @@ def get_llm_for_sequence_regression(
     return model
 
 
-def _get_reward_model(base_pretrained_model, base_llm_model, value_head_prefix="score", packing_samples=False):
-    class RewardModel(base_pretrained_model):
+def _get_reward_model(base_llm_model, value_head_prefix="score", packing_samples=False):
+    class RewardModel(base_llm_model):
         supports_gradient_checkpointing = True
 
         def __init__(self, config: AutoConfig):
             super().__init__(config)
-            setattr(self, self.base_model_prefix, base_llm_model(config))
 
             self.value_head_prefix = value_head_prefix
             setattr(self, value_head_prefix, nn.Linear(config.hidden_size, 1, bias=False))
@@ -187,26 +186,43 @@ def _get_reward_model(base_pretrained_model, base_llm_model, value_head_prefix="
             ring_attn_group=None,
             pad_sequence=False,
             packed_seq_lens=None,
+            visual_inputs=None,
         ) -> torch.Tensor:
+            if visual_inputs is None:
+                visual_inputs = {}
+            inputs_embeds = super().get_inputs_embeds(input_ids, **visual_inputs)
             if not self.packing_samples:
                 # https://github.com/OpenRLHF/OpenRLHF/issues/217
-                position_ids = attention_mask.long().cumsum(-1) - 1
-                position_ids.masked_fill_(attention_mask == 0, 1)
+                #position_ids = attention_mask.long().cumsum(-1) - 1
+                #position_ids.masked_fill_(attention_mask == 0, 1)
+                position_ids = super().get_position_ids(input_ids,attention_mask=attention_mask, **visual_inputs)
             else:
                 # convert attention_mask to position_ids
+                packed_position_ids = super().get_position_ids(input_ids, **visual_inputs)
                 if ring_attn_group is not None:
-                    input_ids, attention_mask, position_ids = convert_ring_attn_params(
-                        input_ids, attention_mask, packed_seq_lens, ring_attn_group
+                    input_ids, attention_mask, hacked_position_ids, inputs_embeds, split_position_ids = convert_ring_attn_params(
+                        input_ids, attention_mask, packed_seq_lens, ring_attn_group, inputs_embeds, packed_position_ids
                     )
+                    position_ids = super().offset_split_position_ids(split_position_ids, hacked_position_ids)
+                    
                 else:
-                    position_ids = reset_position_ids(attention_mask)
+                    hacked_position_ids = reset_position_ids(attention_mask)
+                    position_ids = super().offset_split_position_ids(packed_position_ids, hacked_position_ids)
+
+                set_hacked_position_ids(hacked_position_ids)
                 # explicitly ignore attention_mask for packing_samples
                 attention_mask = None
 
-            outputs = getattr(self, self.base_model_prefix)(
-                input_ids, attention_mask=attention_mask, position_ids=position_ids
+            outputs = super().forward(
+                inputs_embeds=inputs_embeds, attention_mask=attention_mask, position_ids=position_ids,output_hidden_states=True, **visual_inputs
             )
-            last_hidden_states = outputs["last_hidden_state"]
+            clear_hacked_position_ids()
+            if "last_hidden_state" in outputs:
+                last_hidden_states = outputs["last_hidden_state"]
+            elif "hidden_states" in outputs:
+                last_hidden_states = outputs["hidden_states"][-1]
+            else:
+                raise ValueError("outputs should contain either last_hidden_state or hidden_states")
             values = getattr(self, self.value_head_prefix)(last_hidden_states).squeeze(-1)
 
             if self.packing_samples:
@@ -234,13 +250,12 @@ def _get_reward_model(base_pretrained_model, base_llm_model, value_head_prefix="
     return RewardModel
 
 
-def _get_critic_model(base_pretrained_model, base_llm_model, value_head_prefix="score", packing_samples=False):
-    class CriticModel(base_pretrained_model):
+def _get_critic_model(base_llm_model, value_head_prefix="score", packing_samples=False):
+    class CriticModel(base_llm_model):
         supports_gradient_checkpointing = True
 
         def __init__(self, config: AutoConfig):
             super().__init__(config)
-            setattr(self, self.base_model_prefix, base_llm_model(config))
 
             self.value_head_prefix = value_head_prefix
             setattr(self, value_head_prefix, nn.Linear(config.hidden_size, 1, bias=False))
@@ -266,26 +281,43 @@ def _get_critic_model(base_pretrained_model, base_llm_model, value_head_prefix="
             ring_attn_group=None,
             values_allgather=False,
             packed_seq_lens=None,
+            visual_inputs={},
         ) -> torch.Tensor:
+            inputs_embeds = super().get_inputs_embeds(input_ids, **visual_inputs)
             if not self.packing_samples:
                 # https://github.com/OpenRLHF/OpenRLHF/issues/217
-                position_ids = attention_mask.long().cumsum(-1) - 1
-                position_ids.masked_fill_(attention_mask == 0, 1)
+                # position_ids = attention_mask.long().cumsum(-1) - 1
+                # position_ids.masked_fill_(attention_mask == 0, 1)
+                position_ids = super().get_position_ids(input_ids,attention_mask=attention_mask, **visual_inputs)
             else:
                 # convert attention_mask to position_ids
+                packed_position_ids = super().get_position_ids(input_ids, **visual_inputs)
                 if ring_attn_group is not None:
-                    input_ids, attention_mask, position_ids = convert_ring_attn_params(
-                        input_ids, attention_mask, packed_seq_lens, ring_attn_group
+                    
+                    input_ids, attention_mask, hacked_position_ids, inputs_embeds, split_position_ids = convert_ring_attn_params(
+                        input_ids, attention_mask, packed_seq_lens, ring_attn_group, inputs_embeds, packed_position_ids
                     )
+                    position_ids = super().offset_split_position_ids(split_position_ids, hacked_position_ids)
+                    
                 else:
-                    position_ids = reset_position_ids(attention_mask)
+                    hacked_position_ids = reset_position_ids(attention_mask)
+                    position_ids = super().offset_split_position_ids(packed_position_ids, hacked_position_ids)
+
+                set_hacked_position_ids(hacked_position_ids)
                 # explicitly ignore attention_mask for packing_samples
                 attention_mask = None
 
-            outputs = getattr(self, self.base_model_prefix)(
-                input_ids, attention_mask=attention_mask, position_ids=position_ids
+            outputs = super().forward(
+                inputs_embeds=inputs_embeds, attention_mask=attention_mask, position_ids=position_ids,output_hidden_states=True, **visual_inputs
             )
-            last_hidden_states = outputs["last_hidden_state"]
+            clear_hacked_position_ids()
+            if "last_hidden_state" in outputs:
+                last_hidden_states = outputs["last_hidden_state"]
+            elif "hidden_states" in outputs:
+                last_hidden_states = outputs["hidden_states"][-1]
+            else:
+                raise ValueError("outputs should contain either last_hidden_state or hidden_states")
+
             values = getattr(self, self.value_head_prefix)(last_hidden_states).squeeze(-1)
             if ring_attn_group is not None and values_allgather:
                 values = all_gather(values, ring_attn_group).reshape(values.shape[0], -1)[:, :-1]

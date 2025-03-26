@@ -1,0 +1,16 @@
+{
+  "excludes": [
+    "ckpt/",
+    "log/",
+    "dataset/",
+    "data/",
+    "data_filter/",
+    "checkpoints/",
+    "*.pth",
+    "*.tar",
+    "venv/",
+    "__pycache__/",
+    "*.log",
+    "*.mp4"
+  ]
+}

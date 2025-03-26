@@ -3,15 +3,8 @@ import os
 from datasets import interleave_datasets, load_dataset, load_from_disk
 from transformers import AutoTokenizer
 
-
 def get_tokenizer(pretrain, model, padding_side="left", strategy=None, use_fast=True):
     tokenizer = AutoTokenizer.from_pretrained(pretrain, trust_remote_code=True, use_fast=use_fast)
-    if tokenizer.__class__.__name__ == "InternLM2Tokenizer":
-
-        def eos_token_id_patch(self):
-            return self.super().eos_token_id
-
-        tokenizer.__class__.eos_token_id = property(eos_token_id_patch)
     tokenizer.padding_side = padding_side
     # NOTE: When enable vLLM, do not resize_token_embeddings, or the vocab size will mismatch with vLLM.
     # https://github.com/facebookresearch/llama-recipes/pull/196

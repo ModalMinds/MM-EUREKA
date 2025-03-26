@@ -3,18 +3,16 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.distributed as dist
 import torch.nn as nn
-from flash_attn.utils.distributed import all_gather
+from torch.nn import functional as F
 from peft import LoraConfig, TaskType, get_peft_model
 from peft.tuners.lora import LoraLayer
-from torch.nn import functional as F
-from transformers import AutoTokenizer, BitsAndBytesConfig
+from transformers import BitsAndBytesConfig, AutoConfig
 from transformers.integrations.deepspeed import HfDeepSpeedConfig
+from flash_attn.utils.distributed import all_gather
 
-from openrlhf.internvl import InternVLChatModel
-from openrlhf.internvl.train.constants import IMG_CONTEXT_TOKEN
-
-from .ring_attn_utils import convert_ring_attn_params
-from .utils import freeze_params, log_probs_from_logits, reset_position_ids
+from .ring_attn_utils import convert_ring_attn_params, set_hacked_position_ids, clear_hacked_position_ids
+from .utils import log_probs_from_logits, reset_position_ids
+from openrlhf.models.lmm_kits.utils import get_generation_cls
 
 
 class Actor(nn.Module):
@@ -64,7 +62,6 @@ class Actor(nn.Module):
             else:
                 dschf = None
 
-            assert not load_in_4bit
             if load_in_4bit:
                 assert bf16, "we only support bnb_4bit_compute_dtype = bf16"
                 nf4_config = BitsAndBytesConfig(
@@ -76,7 +73,10 @@ class Actor(nn.Module):
             else:
                 nf4_config = None
 
-            self.model = InternVLChatModel.from_pretrained(
+            #There is no AutoModelForConditionalGeneration in transformers. We manually implement it.
+            config = AutoConfig.from_pretrained(pretrain_or_model)
+            model_cls = get_generation_cls(config)
+            self.model = model_cls.from_pretrained(
                 pretrain_or_model,
                 trust_remote_code=True,
                 attn_implementation=attn_implementation,
@@ -84,11 +84,7 @@ class Actor(nn.Module):
                 torch_dtype=torch.bfloat16 if bf16 else "auto",
                 device_map=device_map,
             )
-            freeze_params(self.model.vision_model)
-            tokenizer = AutoTokenizer.from_pretrained(pretrain_or_model, trust_remote_code=True)
-            self.model.img_context_token_id = tokenizer.convert_tokens_to_ids(IMG_CONTEXT_TOKEN)
 
-            assert not lora_rank > 0
             # LoRA
             if lora_rank > 0:
                 # https://github.com/huggingface/peft/issues/137
@@ -193,40 +189,47 @@ class Actor(nn.Module):
     def forward(
         self,
         sequences: torch.LongTensor,
-        pixel_values: torch.Tensor,
-        image_flags: torch.LongTensor,
         num_actions: Optional[Union[int, list[int]]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         return_output=False,
         ring_attn_group: Optional[dist.ProcessGroup] = None,
         logps_allgather=False,
         packed_seq_lens: Optional[list[int]] = None,
+        visual_inputs: Optional[dict] = None,
     ) -> torch.Tensor:
         """Returns action log probs"""
-        assert not self.packing_samples
+        if visual_inputs is None:
+            visual_inputs = {}
+        '''
+        for k,v in visual_inputs.items():
+            if v.dtype == torch.float32:
+                visual_inputs[k] = v.to(self.model.get_input_embeddings().weight.dtype)
+        '''
+        inputs_embeds = self.model.get_inputs_embeds(sequences, **visual_inputs)
         if not self.packing_samples:
             # https://github.com/OpenRLHF/OpenRLHF/issues/217
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
+            #position_ids = attention_mask.long().cumsum(-1) - 1
+            #position_ids.masked_fill_(attention_mask == 0, 1)
+            position_ids = self.model.get_position_ids(sequences,attention_mask=attention_mask, **visual_inputs)
         else:
             # convert attention_mask to position_ids
+            packed_position_ids = self.model.get_position_ids(sequences, **visual_inputs)
             if ring_attn_group is not None:
                 labels = sequences
-                sequences, attention_mask, position_ids = convert_ring_attn_params(
-                    sequences, attention_mask, packed_seq_lens, ring_attn_group
+                sequences, attention_mask, hacked_position_ids, inputs_embeds, split_position_ids = convert_ring_attn_params(
+                    sequences, attention_mask, packed_seq_lens, ring_attn_group, inputs_embeds, packed_position_ids
                 )
+                position_ids = self.model.offset_split_position_ids(split_position_ids, hacked_position_ids) # this is true position_ids
+                #position_ids is directly hacked into flash_attn_forward to distinguish between different sequences
             else:
-                position_ids = reset_position_ids(attention_mask)
+                hacked_position_ids = reset_position_ids(attention_mask)
+                position_ids = self.model.offset_split_position_ids(packed_position_ids, hacked_position_ids)
+
+            set_hacked_position_ids(hacked_position_ids)
             # explicitly ignore attention_mask for packing_samples
             attention_mask = None
-
-        output = self.model(
-            pixel_values=pixel_values,
-            input_ids=sequences,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            image_flags=image_flags,
-        )
+        output = self.model(inputs_embeds=inputs_embeds, attention_mask=attention_mask, position_ids=position_ids, **visual_inputs)
+        clear_hacked_position_ids()
         # https://github.com/OpenRLHF/OpenRLHF/pull/634
         output["logits"] = output["logits"].to(torch.float32)
 
@@ -234,7 +237,6 @@ class Actor(nn.Module):
             assert return_output
             return output
 
-        assert not self.packing_samples
         if not self.packing_samples:
             log_probs = log_probs_from_logits(output["logits"][:, :-1, :], sequences[:, 1:])
             action_log_probs = log_probs[:, -num_actions:]

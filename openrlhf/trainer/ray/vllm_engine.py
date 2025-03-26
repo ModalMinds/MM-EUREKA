@@ -1,4 +1,6 @@
 import os
+import queue
+from collections import defaultdict
 from typing import Any, List
 
 import ray
@@ -36,8 +38,6 @@ class LLMRayActor:
             # RAY_EXPERIMENTAL_NOSET_*_VISIBLE_DEVICES is set.
             os.environ["CUDA_VISIBLE_DEVICES"] = str(ray.get_gpu_ids()[0])
 
-        # every worker will use 0.2 GPU, so that we can schedule
-        # 2 instances on the same GPUs.
         num_gpus = kwargs.pop("num_gpus")
         if bundle_indices is not None:
             os.environ["VLLM_RAY_PER_WORKER_GPUS"] = str(num_gpus)
@@ -48,7 +48,7 @@ class LLMRayActor:
         self.num_actors = kwargs.pop("num_actors")
         self.actor_counter = 0
         self.requests = {}
-        self.responses = {}
+        self.response_queues = defaultdict(queue.Queue)
 
         self.llm = LLM(*args, **kwargs)
 
@@ -73,11 +73,11 @@ class LLMRayActor:
     def wake_up(self):
         self.llm.wake_up()
 
-    def add_requests(self, actor_rank, *, sampling_params, prompt_inputs):
+    def add_requests(self, actor_rank, *, sampling_params, vllm_vision_input):
         """
         Save the requests from actors and generate responses when all actors have sent their requests
         """
-        self.requests[actor_rank] = prompt_inputs
+        self.requests[actor_rank] = vllm_vision_input
         self.actor_counter += 1
         if self.actor_counter == self.num_actors:
             assert len(self.requests) == self.num_actors
@@ -89,28 +89,14 @@ class LLMRayActor:
 
             if len(requests) > 0:
                 # For now we assume that all requests have the same sampling params
-                responses = self.llm.generate(sampling_params=sampling_params, prompts=requests)
-                mm_inputs = [
-                    self.llm.llm_engine.input_processor(
-                        self.llm.llm_engine.input_preprocessor.preprocess(request, request_id="-1")
-                    )
-                    for request in requests
-                ]
-                responses = [
-                    {
-                        "response": response,
-                        "pixel_values": mm_input["mm_kwargs"]["pixel_values_flat"],
-                        "image_num_patches": mm_input["mm_kwargs"]["image_num_patches"].sum(),
-                    }
-                    for response, mm_input in zip(responses, mm_inputs)
-                ]
+                responses = self.llm.generate(requests, sampling_params=sampling_params)
             else:
                 responses = []
 
             offset = 0
             self.responses = {}
             for actor_rank, num in num_requests:
-                self.responses[actor_rank] = responses[offset : offset + num]
+                self.response_queues[actor_rank].put(responses[offset : offset + num])
                 offset += num
 
             self.actor_counter = 0
@@ -120,7 +106,7 @@ class LLMRayActor:
         """
         Return the responses for the actor with the given rank
         """
-        return self.responses.pop(actor_rank)
+        return self.response_queues[actor_rank].get()
 
 
 def create_vllm_engines(

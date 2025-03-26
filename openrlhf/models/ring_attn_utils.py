@@ -1,6 +1,7 @@
 import torch
 import torch.distributed as dist
 import torch.nn.functional as F
+import transformers
 
 
 RING_ATTN_GROUP = None
@@ -60,7 +61,7 @@ def update_ring_attn_params(packed_seq_lens, total_seq_len):
     update_ring_flash_attn_params(cu_seqlens, RING_ATTN_GROUP)
 
 
-def convert_ring_attn_params(sequences, attention_mask, packed_seq_lens, ring_attn_group):
+def convert_ring_attn_params(sequences, attention_mask, packed_seq_lens, ring_attn_group, inputs_embeds, position_ids):
     # each rank within the ring group will process sequences[start:end]
     ring_attn_rank = dist.get_rank(group=ring_attn_group)
     ring_attn_size = dist.get_world_size(group=ring_attn_group)
@@ -68,10 +69,12 @@ def convert_ring_attn_params(sequences, attention_mask, packed_seq_lens, ring_at
     local_seq_len = total_seq_len // ring_attn_size
     start, end = ring_attn_rank * local_seq_len, (ring_attn_rank + 1) * local_seq_len
     sequences = sequences[:, start:end]
+    inputs_embeds = inputs_embeds[:, start:end]
     attention_mask = attention_mask[:, start:end]
-    position_ids = reset_ring_attn_position_ids(start, end, packed_seq_lens)
+    position_ids = position_ids[..., start:end] #qwen2_5_vl has position_ids shape: [3,bs,seq_len]
+    hacked_position_ids = reset_ring_attn_position_ids(start, end, packed_seq_lens)
     update_ring_attn_params(packed_seq_lens, total_seq_len)
-    return sequences, attention_mask, position_ids
+    return sequences, attention_mask, hacked_position_ids, inputs_embeds, position_ids
 
 
 def pad_sequences(sequences, attention_mask, num_actions, packed_seq_lens, ring_attn_group, pad_token_id=0):
@@ -121,3 +124,28 @@ def unpad_sequences(
         if kl is not None:
             kl = kl[:, :-pad_len]
     return sequences, attention_mask, num_actions, packed_seq_lens, action_log_probs, values, kl
+
+HACKED_POSITION_IDS = None
+
+#Both ring and our hack substitute flash_attn. This func must be called after ring's substitue_hf_flash_attn.
+def substitute_ring_flash_attn():
+    raw_flash_attention_forward = transformers.modeling_flash_attention_utils._flash_attention_forward
+    def _hacked_flash_attention_forward(*args,**kwargs):
+        global HACKED_POSITION_IDS
+        if HACKED_POSITION_IDS is not None:
+            kwargs['position_ids'] = HACKED_POSITION_IDS
+        return raw_flash_attention_forward(*args,**kwargs)
+
+    transformers.modeling_flash_attention_utils._flash_attention_forward = _hacked_flash_attention_forward
+
+def set_hacked_position_ids(position_ids):
+    global HACKED_POSITION_IDS
+    HACKED_POSITION_IDS = position_ids
+
+def clear_hacked_position_ids():
+    global HACKED_POSITION_IDS
+    HACKED_POSITION_IDS = None
+
+def get_hacked_position_ids():
+    global HACKED_POSITION_IDS
+    return HACKED_POSITION_IDS

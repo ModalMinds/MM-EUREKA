@@ -36,7 +36,7 @@ def _fetch_version():
 
 
 def _fetch_package_name():
-    return "mm-eureka-nightly" if _is_nightly() else "mm-eureka"
+    return "openrlhf-nightly" if _is_nightly() else "openrlhf"
 
 
 # Custom wheel class to modify the wheel name
@@ -59,7 +59,7 @@ class bdist_wheel(_bdist_wheel):
 
 # Setup configuration
 setup(
-    author="MM-Eureka Team",
+    author="OpenRLHF Team",
     name=_fetch_package_name(),
     version=_fetch_version(),
     packages=find_packages(
@@ -69,13 +69,13 @@ setup(
             "examples",
         )
     ),
-    description="A Ray-based High-performance MultiModal RLHF framework based on OpenRLHF.",
+    description="A Ray-based High-performance RLHF framework.",
     long_description=_fetch_readme(),
     long_description_content_type="text/markdown",
     install_requires=_fetch_requirements("requirements.txt"),
     extras_require={
-        "vllm": ["vllm==0.7.2"],
-        "vllm_latest": ["vllm>0.7.2"],
+        "vllm": ["vllm==0.7.3"],
+        "vllm_latest": ["vllm>0.7.3"],
     },
     python_requires=">=3.10",
     classifiers=[

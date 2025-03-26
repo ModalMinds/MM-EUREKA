@@ -69,7 +69,15 @@ class PolicyLoss(nn.Module):
         advantages: torch.Tensor,
         action_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        ratio = (log_probs - old_log_probs).exp()
+        # ratio = (log_probs - old_log_probs).exp()
+        # surr1 = ratio * advantages
+        # surr2 = ratio.clamp(1 - self.clip_eps, 1 + self.clip_eps) * advantages
+        # loss = -torch.min(surr1, surr2)
+        # loss = masked_mean(loss, action_mask, dim=-1).mean()
+        # return loss
+        
+        c = 3.0
+        ratio = ((log_probs - old_log_probs).exp()).clamp(max=c)
         surr1 = ratio * advantages
         surr2 = ratio.clamp(1 - self.clip_eps, 1 + self.clip_eps) * advantages
         loss = -torch.min(surr1, surr2)

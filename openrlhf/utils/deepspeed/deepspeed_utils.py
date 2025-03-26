@@ -14,7 +14,8 @@ def get_train_ds_config(
     device = "cpu" if offload else "none"
     zero_opt_dict = {
         "stage": stage,
-        "offload_param": {"device": device},
+        # "offload_param": {"device": device},
+        "offload_param": {"device": "cpu", "pin_memory": True},
         "offload_optimizer": {
             "device": "cpu" if adam_offload else "none",
             "pin_memory": True,
@@ -130,6 +131,7 @@ def offload_deepspeed_states(model, pin_memory=True, non_blocking=True):
         non_blocking=non_blocking,
     )
     model.empty_partition_cache()
+    torch.cuda.empty_cache()
     torch.distributed.barrier()
     torch.cuda.synchronize()
 
@@ -149,5 +151,6 @@ def reload_deepspeed_states(model, non_blocking=True):
     import torch
 
     model.reload_states(non_blocking=non_blocking)
+    torch.cuda.empty_cache()
     torch.distributed.barrier()
     torch.cuda.synchronize()

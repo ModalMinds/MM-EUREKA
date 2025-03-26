@@ -12,10 +12,11 @@ from transformers.trainer import get_scheduler
 
 from openrlhf.datasets import PromptDataset, SFTDataset
 from openrlhf.models import Actor
+from openrlhf.models.lmm_kits.utils import get_data_processor
 from openrlhf.trainer import PPOTrainer
 from openrlhf.trainer.ppo_utils import Experience, RemoteExperienceMaker
 from openrlhf.trainer.ray.vllm_engine import batch_vllm_engine_call
-from openrlhf.utils import blending_datasets, get_tokenizer
+from openrlhf.utils import blending_datasets
 from openrlhf.utils.deepspeed import DeepspeedStrategy
 from openrlhf.utils.deepspeed.deepspeed_utils import offload_deepspeed_states, reload_deepspeed_states
 from openrlhf.utils.distributed_util import init_process_group
@@ -50,6 +51,7 @@ class ActorPPOTrainer(PPOTrainer):
             self.reward_model,
             self.initial_model,
             self.tokenizer,
+            self.data_processor,
             self.prompt_max_len,
             self.kl_ctl,
             self.strategy,
@@ -163,8 +165,7 @@ class ActorPPOTrainer(PPOTrainer):
                 torch.distributed.barrier()
                 torch.cuda.synchronize()
                 self._broadcast_to_vllm()
-                torch.distributed.barrier()
-                torch.cuda.synchronize()
+                
 
                 if self.strategy.args.vllm_enable_sleep:
                     batch_vllm_engine_call(self.vllm_engines, "sleep")
@@ -273,7 +274,7 @@ class ActorPPOTrainer(PPOTrainer):
             save_path = os.path.join(args.ckpt_path, f"{tag}_hf")
             self.strategy.save_model(
                 self.ema_model if args.enable_ema else self.actor,
-                self.tokenizer,
+                self.processor,
                 save_path,
             )
         # wait
@@ -315,13 +316,24 @@ class ActorModelRayActor(BasePPORole):
             packing_samples=strategy.args.packing_samples,
         )
         strategy.print(actor)
+        # Support freeze some parameter
+        if hasattr(strategy.args, "freeze_prefix") and strategy.args.freeze_prefix:
+            frozen_count = 0
+            total_params = 0
+            for name, param in actor.model.named_parameters():
+                print(name)
+                total_params += 1
+                if any(name.startswith(prefix) for prefix in strategy.args.freeze_prefix):
+                    param.requires_grad = False
+                    frozen_count += 1
+            strategy.print(f"Froze {frozen_count}/{total_params} parameters based on prefixes: {strategy.args.freeze_prefix}")
 
         # configure tokenizer
-        self.tokenizer = get_tokenizer(
+        
+        self.data_processor = get_data_processor(
             pretrain, actor.model, "left", strategy, use_fast=not strategy.args.disable_fast_tokenizer
         )
-        self.tokenizer.eos_token = "<|im_end|>"
-        self.tokenizer.eos_token_id = self.tokenizer.convert_tokens_to_ids("<|im_end|>")
+        self.tokenizer = self.data_processor.tokenizer
 
         if args.enable_ema:
             ema_model = Actor(
@@ -410,7 +422,6 @@ class ActorModelRayActor(BasePPORole):
             args.rollout_batch_size // (strategy.world_size // strategy.ring_attn_size),
             True,
             True,
-            collate_fn=lambda batch: batch,
         )
 
         if args.pretrain_data:
@@ -488,7 +499,7 @@ class ActorModelRayActor(BasePPORole):
             micro_rollout_batch_size=args.micro_rollout_batch_size,
             gradient_checkpointing=args.gradient_checkpointing,
             critic_train_remote=critic_train_remote,
-            tokenizer=self.tokenizer,
+            data_processor=self.data_processor,
             prompt_max_len=args.prompt_max_len,
             value_clip=args.value_clip,
             eps_clip=args.eps_clip,
@@ -505,7 +516,8 @@ class ActorModelRayActor(BasePPORole):
             max_length=args.max_len,
             temperature=args.temperature,
             top_p=args.top_p,
-            repetition_penalty=args.repetition_penalty,
+            min_pixels=args.min_pixels,
+            max_pixels=args.max_pixels,
             pad_token_id=self.tokenizer.pad_token_id,
             eos_token_id=self.tokenizer.eos_token_id,
             save_hf_ckpt=args.save_hf_ckpt,
@@ -515,8 +527,19 @@ class ActorModelRayActor(BasePPORole):
         # broadcast checkpoint
         ckpt_path = os.path.join(args.ckpt_path, "_actor")
         if args.load_checkpoint and os.path.exists(ckpt_path) and not vllm_engines is None:
+            # vLLM wakeup when vllm_enable_sleep
+            if self.strategy.args.vllm_enable_sleep:
+                batch_vllm_engine_call(self.vllm_engines, "wake_up")
             torch.distributed.barrier()
+            torch.cuda.synchronize()
+
             trainer._broadcast_to_vllm()
+
+            # vLLM offload when vllm_enable_sleep
+            if self.strategy.args.vllm_enable_sleep:
+                batch_vllm_engine_call(self.vllm_engines, "sleep")
+                torch.distributed.barrier()
+                torch.cuda.synchronize()
 
         trainer.fit(
             args,
@@ -532,6 +555,6 @@ class ActorModelRayActor(BasePPORole):
         # save model checkpoint after fitting on only rank0
         self.strategy.save_model(
             self.ema_model if args.enable_ema else self.actor,
-            self.tokenizer,
+            self.data_processor.processor,
             args.save_path,
         )

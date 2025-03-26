@@ -11,7 +11,7 @@ from transformers.trainer import get_scheduler
 from openrlhf.models import get_llm_for_sequence_regression
 from openrlhf.trainer import PPOTrainer
 from openrlhf.trainer.ppo_utils import Experience
-from openrlhf.utils import get_tokenizer
+from openrlhf.models.lmm_kits.utils import get_data_processor
 from openrlhf.utils.deepspeed import DeepspeedStrategy
 from openrlhf.utils.deepspeed.deepspeed_utils import offload_deepspeed_states, reload_deepspeed_states
 
@@ -88,12 +88,6 @@ class CriticModelRayActor(BasePPORole):
         strategy.print("reward normalization status: {}".format(strategy.args.normalize_reward))
         strategy.print("mean: {}, std {}".format(critic.mean, critic.std))
 
-        # configure tokenizer
-        if strategy.args.save_value_network:
-            self.tokenizer = get_tokenizer(
-                pretrain, critic, "left", strategy, use_fast=not strategy.args.disable_fast_tokenizer
-            )
-
         # configure optimizer
         critic_optim = strategy.create_optimizer(
             critic, lr=args.critic_learning_rate, betas=args.adam_betas, weight_decay=args.l2
@@ -132,6 +126,13 @@ class CriticModelRayActor(BasePPORole):
         # configure Trainer
         # only use wandb at actor model
         strategy.args.use_wandb = False
+        # configure tokenizer
+        args = strategy.args
+
+        self.data_processor = get_data_processor(
+            pretrain, self.critic, "left", strategy, use_fast=not strategy.args.disable_fast_tokenizer
+        )
+
         self.trainer = CriticPPOTrainer(
             strategy,
             actor=None,
@@ -150,6 +151,7 @@ class CriticModelRayActor(BasePPORole):
             prompt_max_len=args.prompt_max_len,
             value_clip=args.value_clip,
             eps_clip=args.eps_clip,
+            data_processor=self.data_processor
         )
 
     def forward(
@@ -158,11 +160,15 @@ class CriticModelRayActor(BasePPORole):
         num_actions: Optional[Union[int, list[int]]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         packed_seq_lens=None,
+        visual_inputs=None,
     ) -> torch.Tensor:
         """Generates critic values."""
         device = torch.cuda.current_device()
         self.critic.eval()
+        if visual_inputs is None:
+            visual_inputs = {}
         with torch.no_grad():
+            visual_inputs = {k: v.to(device) for k, v in visual_inputs.items()}
             value = self.critic(
                 sequences.to(device),
                 num_actions,
@@ -170,6 +176,7 @@ class CriticModelRayActor(BasePPORole):
                 ring_attn_group=self.strategy.ring_attn_group,
                 values_allgather=True,
                 packed_seq_lens=packed_seq_lens,
+                visual_inputs=visual_inputs,
             )
         self.critic.train()  # reset model state
         return value.to("cpu")
@@ -196,9 +203,10 @@ class CriticModelRayActor(BasePPORole):
         # save model checkpoint after fitting on only rank0
         self.strategy.save_model(
             self.critic,
-            self.tokenizer,
+            self.data_processor.processor,
             args.save_path + "_critic",
         )
+
 
     def save_checkpoint(self, tag):
         args = self.strategy.args

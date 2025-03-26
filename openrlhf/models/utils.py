@@ -38,7 +38,6 @@ def compute_approx_kl(
 
     # The k3 estimator is the non negative kl approximation in
     # http://joschu.net/blog/kl-approx.html
-    # Besides non negative, it is also unbiased and have lower variance.
     if kl_estimator == "k3":
         log_ratio = log_probs.float() - log_probs_base.float()
         if action_mask is not None:
@@ -145,8 +144,3 @@ def unpacking_samples(values: torch.Tensor, packed_seqlens: list[int]):
         unpacked_values.append(values[offset : offset + seqlen])
         offset += seqlen
     return unpacked_values
-
-
-def freeze_params(module):
-    for param in module.parameters():
-        param.requires_grad = False

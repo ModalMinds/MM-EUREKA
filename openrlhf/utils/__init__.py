@@ -6,5 +6,5 @@ __all__ = [
     "reward_normalization",
     "blending_datasets",
     "get_strategy",
-    "get_tokenizer",
+    "get_tokenizer"
 ]

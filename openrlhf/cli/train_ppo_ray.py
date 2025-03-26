@@ -59,9 +59,11 @@ def train(args):
     # if colocated, create placement group for actor and ref model explicitly.
     pg = None
     if args.colocate_actor_ref or args.colocate_all_models:
-        assert (
-            args.actor_num_nodes == args.ref_num_nodes and args.actor_num_gpus_per_node == args.ref_num_gpus_per_node
-        ), f"num_nodes and num_gpus_per_node must be the same when colocate actor and ref model."
+        if args.init_kl_coef > 0:
+            assert (
+                args.actor_num_nodes == args.ref_num_nodes
+                and args.actor_num_gpus_per_node == args.ref_num_gpus_per_node
+            ), f"num_nodes and num_gpus_per_node must be the same when colocate actor and ref model."
 
         bundles = [{"GPU": 1, "CPU": 1} for _ in range(args.actor_num_nodes * args.actor_num_gpus_per_node)]
         pg = placement_group(bundles, strategy="PACK")
@@ -117,7 +119,6 @@ def train(args):
     if not args.colocate_all_models:
         pg = None
 
-    assert args.critic_pretrain is None
     # if colocated, create placement group for critic and reward model explicitly.
     if args.critic_pretrain and args.colocate_critic_reward:
         assert (
@@ -129,7 +130,6 @@ def train(args):
         pg = placement_group(bundles, strategy="PACK")
         ray.get(pg.ready())
 
-    assert args.critic_pretrain is None
     if args.critic_pretrain:
         critic_model = PPORayActorGroup(
             args.critic_num_nodes,
@@ -169,7 +169,6 @@ def train(args):
 
     ray.get(refs)
 
-    assert args.critic_pretrain is None
     if args.critic_pretrain:
         # critic scheduler initialization depends on max_step, so we have to init critic after actor
         # TODO: use first reward model as critic model
@@ -186,7 +185,6 @@ def train(args):
     # save model
     ray.get(actor_model.async_save_model())
 
-    assert args.critic_pretrain is None
     if args.critic_pretrain and args.save_value_network:
         ray.get(critic_model.async_save_model())
 
@@ -316,7 +314,6 @@ if __name__ == "__main__":
     parser.add_argument("--normalize_reward", action="store_true", default=False, help="Enable Reward Normazation")
     parser.add_argument("--top_p", type=float, default=1.0)
     parser.add_argument("--temperature", type=float, default=1.0)
-    parser.add_argument("--repetition_penalty", type=float, default=1.0)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--freezing_actor_steps", type=int, default=-1, help="Used for critic initialization")
     parser.add_argument(
@@ -340,7 +337,12 @@ if __name__ == "__main__":
     parser.add_argument("--aux_loss_coef", type=float, default=0, help="MoE balancing loss")
     parser.add_argument("--adam_betas", type=float, nargs=2, default=(0.9, 0.95), help="Betas for Adam optimizer")
     parser.add_argument("--reward_clip_range", type=float, nargs=2, default=(-10, 10), help="Reward clip range")
-
+    parser.add_argument("--freeze_prefix", type=str, nargs="+", default=None,
+        help="List of parameter name prefixes to freeze during training"
+    )
+    parser.add_argument("--drop_maxlen", action="store_true", default=False)
+    parser.add_argument("--max_pixels",type=int,default=640*28*28,help="Max pixels for image")
+    parser.add_argument("--min_pixels",type=int,default=4*28*28,help="Min pixels for image")
     # Reinforce
     parser.add_argument(
         "--advantage_estimator",
@@ -389,6 +391,7 @@ if __name__ == "__main__":
     parser.add_argument("--pretrain_split", type=str, default="train")
 
     parser.add_argument("--input_key", type=str, default="input", help="JSON dataset key")
+    parser.add_argument("--label_key", type=str, default="answer", help="JSON dataset key")
     parser.add_argument("--input_template", type=str, default=None)
     parser.add_argument(
         "--apply_chat_template", action="store_true", default=False, help="Use HF tokenizer chat template"
@@ -414,11 +417,13 @@ if __name__ == "__main__":
     # ModelScope parameters
     parser.add_argument("--use_ms", action="store_true", default=False)
 
+    
     # Filter parameters
     parser.add_argument("--enable_accuracy_filter", action="store_true", default=False)
     parser.add_argument("--freezing_filter_steps", type=int, default=-1)
-    parser.add_argument("--accuracy_lower_bound", type=float, default=0.0, help="Lower bound for accuracy")
-    parser.add_argument("--accuracy_upper_bound", type=float, default=1.0, help="Upper bound for accuracy")
+    parser.add_argument("--accuracy_lower_bound", type=float, default=0.1, help="Lower bound for accuracy")
+    parser.add_argument("--accuracy_upper_bound", type=float, default=0.9, help="Upper bound for accuracy")
+
 
     args = parser.parse_args()
 
@@ -445,6 +450,10 @@ if __name__ == "__main__":
             "[Warning] input_template contains \\n chracters instead of newline. "
             "You likely want to pass $'\\n' in Bash or \"`n\" in PowerShell."
         )
+
+    if args.pretrain_data:
+        print("[Warning] lmm-r1 is not supported with --pretrain_data. We will set args.pretrain_data to None")
+        args.pretrain_data = None
 
     if args.packing_samples:
         if not args.flash_attn:
