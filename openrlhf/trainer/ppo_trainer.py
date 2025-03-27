@@ -288,6 +288,8 @@ class PPOTrainer(ABC):
                         self.replay_buffer.normalize("advantages", self.strategy)
                     status = self.ppo_train(steps)
                     self.replay_buffer.clear()
+                    ## For flush, use below
+                    # self.replay_buffer.flush()
                 else:
                     status = {}
                 
