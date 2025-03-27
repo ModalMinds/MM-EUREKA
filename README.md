@@ -27,7 +27,7 @@ Based on the key factors identified by https://github.com/ModalMinds/MM-EUREKA f
 - The data filtering strategy was transitioned from an offline approach to an online approach.
 - Additional data from the K12 dataset was collected, expanding the total dataset size to 15,000 samples.
 
-Finally, MM-EUREKA-Qwen achieves 73.0 on MathVista, surpassing the original Qwen-2.5-VL by 4.8%.
+Finally, MM-EUREKA-Qwen achieves 73.0 on MathVista, surpassing the original Qwen-2.5-VL by 4.8%. OlympidBench is OE_MM_maths_en_comp.
 
 |                             | Base Model                 | MathVista       | MathVerse       | MathVision  | OlympidBench  | K12              |
 | --------------------------- | -------------------------- | --------------- | --------------- | ----------- | ------------- | ---------------- |
