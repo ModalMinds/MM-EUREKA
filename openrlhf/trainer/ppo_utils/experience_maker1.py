@@ -513,6 +513,51 @@ class NaiveExperienceMaker(ABC):
         # default rewards
         return experiences, [experience.info["reward"] for experience in experiences]
 
+
+    ## For Adora, use below
+    # @torch.no_grad()
+    # def process_experiences(self, experiences: List[Experience]) -> Tuple[List[Experience], List[torch.Tensor]]:
+    #     """
+    #     Process experiences, this can be used to filter out some experiences or do some processing on the rewards.
+
+    #     Output:
+    #     - experiences: List of Experience
+    #     - rewards: List of rewards
+    #     """
+    #     adora_lamda = 0.1
+    #     args = self.strategy.args
+    #     rewards = torch.cat([experience.info["reward"] for experience in experiences])
+    #     rewards = rewards.reshape(-1, args.n_samples_per_prompt).to(device="cuda")
+    #     # ids = torch.cat([experience.info["uid"] for experience in experiences])
+    #     # ids = ids.reshape(-1, args.n_samples_per_prompt).to(device="cuda")
+    #     response_lengths = torch.cat([experience.info["response_length"] for experience in experiences])
+    #     response_lengths = response_lengths.reshape(-1, args.n_samples_per_prompt).to(device="cuda")
+    #     weights = weight_func(rewards, response_lengths, adora_lamda)
+        
+    #     if args.advantage_estimator == "rloo":
+    #         baseline = (rewards.sum(-1, keepdim=True) - rewards) / (args.n_samples_per_prompt - 1)
+    #         rewards = rewards - baseline
+    #         rewards = rewards * weights
+    #         rewards = rewards.flatten().to(device="cpu").chunk(len(experiences))
+    #         return experiences, rewards
+    #     elif args.advantage_estimator == "reinforce_baseline":
+    #         # REINFORCE++-baseline removed the / std and K3 kl loss in GRPO.
+    #         # `/ std` is not needed in RL variance reduction theory, and `k3 KL` has a larger variance than `k1 KL` under a categorical distribution.
+    #         rewards = rewards - rewards.mean(-1, keepdim=True)
+    #         rewards = rewards * weights
+    #         rewards = rewards.reshape(-1).to(device="cpu").chunk(len(experiences))
+    #         return experiences, rewards
+    #     elif args.advantage_estimator == "group_norm":
+    #         rewards = (rewards - rewards.mean(-1, keepdim=True)) / (rewards.std(-1, keepdim=True) + 1e-9)
+    #         rewards = rewards * weights
+    #         rewards = rewards.reshape(-1).to(device="cpu").chunk(len(experiences))
+    #         return experiences, rewards
+    #     # default rewards
+    #     rewards = rewards * weights
+    #     rewards = rewards.reshape(-1).to(device="cpu").chunk(len(experiences))
+    #     return experiences, rewards
+
+    
     @torch.no_grad()
     def get_advantages_and_returns(
         self,
@@ -1068,3 +1113,25 @@ class RemoteExperienceMaker(NaiveExperienceMaker):
         if self.critic is not None:
             ray.get(self._ref)
             self._ref = None
+
+
+
+
+def weight_func(rewards, response_length, lamda=0.1):  
+    """   
+    """  
+    weights = torch.ones_like(rewards, device=rewards.device)  
+    for i in range(rewards.shape[0]):  
+        reward_row = rewards[i]  
+        response_row = response_length[i]  
+        response_reward_1 = response_row[reward_row > 0.5]  
+        response_reward_not_1 = response_row[(reward_row <= 0.5) & (response_row < 4094)]  
+        max_reward_1 = response_reward_1.max() if response_reward_1.numel() > 0 else float('-inf')  
+        mean_reward_not_1 = response_reward_not_1.mean() if response_reward_not_1.numel() > 0 else float('inf') 
+
+        if max_reward_1 > mean_reward_not_1 or response_reward_1.numel() == 0:  
+            pass
+        else: 
+            weights[i] = lamda
+
+    return weights
