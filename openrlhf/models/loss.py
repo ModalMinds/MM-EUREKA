@@ -82,6 +82,9 @@ class PolicyLoss(nn.Module):
         surr2 = ratio.clamp(1 - self.clip_eps, 1 + self.clip_eps) * advantages
         loss = -torch.min(surr1, surr2)
         loss = masked_mean(loss, action_mask, dim=-1).mean()
+
+        # loss = masked_mean(loss.reshape(-1), action_mask.reshape(-1))
+        # For DAPO Token-level loss 
         return loss
 
 
