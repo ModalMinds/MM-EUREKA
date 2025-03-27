@@ -44,7 +44,7 @@ We demonstrate that both instruction-tuned and pre-trained models can develop st
 
 ## 🗞️ News
 
-- **[2025/03/27]** We released our latest model 'MM-Eureka-Qwen-7B', which is compatible with strategies such as Online Filter and performs well on multiple benchmarks, even surpassing InternVL2.5-Instruct-38B
+- **[2025/03/27]** We released our latest model `MM-Eureka-Qwen-7B`, which is compatible with strategies such as **Online Filter** and performs well on multiple benchmarks, even surpassing InternVL2.5-Instruct-38B
   - 📖 Report: [MM-Eureka-Qwen](https://jagged-court-d9d.notion.site/MM-Eureka-Qwen-1c13cc5a384880ffbd2de24e1dee052d) 
   - 🤗 Model: [MM-Eureka-Qwen-7B](https://huggingface.co/FanqingM/MM-Eureka-Qwen-7B)
   - 🚀 Code: [MM-Eureka-Qwen-Code](https://github.com/ModalMinds/MM-EUREKA/tree/MM-EUREKA-Qwen)
@@ -75,6 +75,7 @@ This repository is built upon [OpenRLHF](https://github.com/OpenRLHF/OpenRLHF), 
 <div align="center">
     <img alt="Training Log" src="./docs/training_log.png"/>
 </div>
+
 *Figure 1 | Train Time Scale-up on Accuracy Reward and Response Length of Rule-Based RL. (a) represents the training scenario on InternVL2.5-instruct-8B, while (b) corresponds to the training scenario on InternVL2.5-pretrained-38B. It can be observed that stable improvements in accuracy reward and response length can be achieved regardless of whether the model is based on an instruct model or a pretrained model.*
 
 - 🤗 [MM-Eureka-8B](https://huggingface.co/FanqingM/MM-Eureka-8B)
