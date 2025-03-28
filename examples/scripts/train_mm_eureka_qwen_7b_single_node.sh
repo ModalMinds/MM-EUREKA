@@ -18,11 +18,11 @@ fi
 
 
 ray start --head  --port=$RAY_MASTER_PORT --dashboard-host=0.0.0.0 --dashboard-port=$RAY_DASHBOARD_PORT --num-gpus 8
-cd MM-EUREKA-Qwen
-export WORKING_DIR=MM-EUREKA-Qwen
+cd MM-EUREKA
+export WORKING_DIR=MM-EUREKA
 RAY_ADDRESS="http://127.0.0.1:$RAY_DASHBOARD_PORT" ray job submit \
     --working-dir $WORKING_DIR \
-    --runtime-env MM-EUREKA-Qwen/runtime_env.json \
+    --runtime-env MM-EUREKA/runtime_env.json \
     -- python3 -m openrlhf.cli.train_ppo_ray \
     --ref_num_nodes 1 \
    --ref_num_gpus_per_node 8 \
