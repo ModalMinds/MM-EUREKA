@@ -23,6 +23,11 @@
 <p style="text-align: center;">MM-EUREKA: Exploring Visual Aha Moment with Rule-based Large-scale Reinforcement Learning<p>
 </div>
 <hr>
+
+<div align="center" style="font-size: 20px; font-weight: bold;">
+!!!Our latest progress is released at <a href="https://github.com/ModalMinds/MM-EUREKA/tree/qwen">MM-Eureka-Qwen</a>!!!
+</div>
+
 <div align="center">
 <a href="https://github.com/ModalMinds/MM-EUREKA/blob/main/MM_Eureka_paper.pdf">[[Paper PDF Link]]</a>
 </div>
@@ -44,15 +49,17 @@ We demonstrate that both instruction-tuned and pre-trained models can develop st
 
 ## 🗞️ News
 
-- **[2025/03/27]** We released our latest model `MM-Eureka-Qwen-7B`, which is compatible with strategies such as **Online Filter** and performs well on multiple benchmarks, even surpassing InternVL2.5-Instruct-38B
-  - 📖 Report: [MM-Eureka-Qwen](https://jagged-court-d9d.notion.site/MM-Eureka-Qwen-1c13cc5a384880ffbd2de24e1dee052d) 
+- **[2025/03/27]** We released `MM-Eureka-Qwen`.
+  - 📖 Report: [MM-Eureka-Qwen-Report](https://jagged-court-d9d.notion.site/MM-Eureka-Qwen-1c13cc5a384880ffbd2de24e1dee052d)
   - 🤗 Model: [MM-Eureka-Qwen-7B](https://huggingface.co/FanqingM/MM-Eureka-Qwen-7B)
-  - 🚀 Code: [MM-Eureka-Qwen-Code](https://github.com/ModalMinds/MM-EUREKA/tree/MM-EUREKA-Qwen)
+  - 📊 Dataset: [MM-Eureka-Dataset](https://huggingface.co/datasets/FanqingM/MM-Eureka-Dataset)
+  - 🚀Code: [MM-Eureka-Qwen-Code](https://github.com/ModalMinds/MM-EUREKA/tree/qwen)
 
 - **[2025/03/07]** We released `MM-Eureka`.
-  - 📖 Paper: [MM-Eureka-paper](https://github.com/ModalMinds/MM-EUREKA/blob/main/MM_Eureka_paper.pdf) 
+  - 📖 Paper: [MM-Eureka-paper](https://github.com/ModalMinds/MM-EUREKA/blob/main/MM_Eureka_paper.pdf)
   - 🤗 Model: [MM-Eureka-8B](https://huggingface.co/FanqingM/MM-Eureka-8B) & [MM-Eureka-Zero-38B](https://huggingface.co/FanqingM/MM-Eureka-Zero-38B)
   - 📊 Dataset: [MM-Eureka-Dataset](https://huggingface.co/datasets/FanqingM/MM-Eureka-Dataset)
+  - 🚀Code: [MM-Eureka-Code](https://github.com/ModalMinds/MM-EUREKA/tree/internvl)
 
 
 
