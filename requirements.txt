@@ -1,27 +1,4 @@
-accelerate
-bitsandbytes
-datasets
-deepspeed==0.16.4
-einops
-flask
-isort
-jsonlines
-levenshtein
-loguru
-loralib
-math-verify==0.5.2
-optimum
-packaging
-peft
-pynvml>=12.0.0
-qwen_vl_utils
-tensorboard
-torch==2.5.1
-torchmetrics
-torchvision
-tqdm
-transformers==4.50.2
-transformers_stream_generator
-wandb
-wheel
-ray[default]==2.42.0
+-r requirements/internvl_chat.txt
+-r requirements/streamlit_demo.txt
+-r requirements/classification.txt
+-r requirements/segmentation.txt

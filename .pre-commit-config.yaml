@@ -1,38 +1,31 @@
-default_language_version:
-  python: python3
-
-ci:
-  autofix_prs: true
-  autoupdate_commit_msg: '[pre-commit.ci] pre-commit suggestions'
-  autoupdate_schedule: quarterly
-
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+  - repo: https://github.com/PyCQA/flake8
+    rev: 5.0.4
     hooks:
-      - id: check-yaml
-      - id: check-case-conflict
-      - id: detect-private-key
-      - id: check-added-large-files
-        args: ['--maxkb=10000']
-      - id: requirements-txt-fixer
-
-  - repo: https://github.com/PyCQA/autoflake
-    rev: v2.0.2
-    hooks:
-      - id: autoflake
-        args: [--remove-all-unused-imports, --in-place]
-
+      - id: flake8
   - repo: https://github.com/PyCQA/isort
-    rev: 5.13.2
+    rev: 5.11.5
     hooks:
       - id: isort
-        name: Format imports
-        exclude: docs/
-
-  - repo: https://github.com/psf/black
-    rev: 24.3.0
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.3.0
     hooks:
-      - id: black
-        name: Format code
-        additional_dependencies: ['click==8.0.2']
+      - id: trailing-whitespace
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: requirements-txt-fixer
+      - id: double-quote-string-fixer
+      - id: check-merge-conflict
+      - id: fix-encoding-pragma
+        args: ["--remove"]
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+  - repo: https://github.com/executablebooks/mdformat
+    rev: 0.7.9
+    hooks:
+      - id: mdformat
+        args: ["--number"]
+        additional_dependencies:
+          - mdformat-openmmlab
+          - mdformat_frontmatter
+          - linkify-it-py
