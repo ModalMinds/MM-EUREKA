@@ -24,7 +24,7 @@
 
 ## 🎯Overview
 
-While Multimodal Large Language Models (MLLMs) have achieved impressive progress in vision-language understanding, they still struggle with complex multi-step reasoning, often producing logically inconsistent or partially correct solutions. A key limitation lies in the lack of fine-grained supervision over intermediate reasoning steps. To address this, we propose **MM-PRM**, a process reward model trained within a fully automated, scalable framework. We first build **MM-Policy**, a strong multimodal model trained on diverse mathematical reasoning data. Then, we construct **MM-K12**, a curated dataset of 10,000 multimodal math problems with verifiable answers, which serves as seed data. Leveraging a Monte Carlo Tree Search (MCTS)-based pipeline, we generate over 700k step-level annotations without human labeling. The resulting PRM is used to score candidate reasoning paths in the Best-of-N inference setup and achieves significant improvements across both in-domain (MM-K12 test set) and out-of-domain (OlympiadBench, MathVista, etc.) benchmarks. Further analysis confirms the effectiveness of soft labels, smaller learning rates, and path diversity in optimizing PRM performance. MM-PRM demonstrates that process supervision is a powerful tool for enhancing the logical robustness of multimodal reasoning systems. We release all our codes and data at [MM-PRM](https://github.com/ModalMinds/MM-PRM).
+While Multimodal Large Language Models (MLLMs) have achieved impressive progress in vision-language understanding, they still struggle with complex multi-step reasoning, often producing logically inconsistent or partially correct solutions. A key limitation lies in the lack of fine-grained supervision over intermediate reasoning steps. To address this, we propose **MM-PRM**, a process reward model trained within a fully automated, scalable framework. We first build **MM-Policy**, a strong multimodal model trained on diverse mathematical reasoning data. Then, we construct **MM-K12**, a curated dataset of 10,000 multimodal math problems with verifiable answers, which serves as seed data. Leveraging a Monte Carlo Tree Search (MCTS)-based pipeline, we generate over 700k step-level annotations without human labeling. The resulting PRM is used to score candidate reasoning paths in the Best-of-N inference setup and achieves significant improvements across both in-domain (MM-K12 test set) and out-of-domain (OlympiadBench, MathVista, etc.) benchmarks. Further analysis confirms the effectiveness of soft labels, smaller learning rates, and path diversity in optimizing PRM performance. MM-PRM demonstrates that process supervision is a powerful tool for enhancing the logical robustness of multimodal reasoning systems. We release all our codes and data at [MM-PRM](https://github.com/ModalMinds/MM-EUREKA/tree/mm-prm).
 
 ## 🗞️ News
 
@@ -161,7 +161,7 @@ We provide our **evaluation code** in the `eval/` directory.
 
 ## ⭐ Starchart
 
-[![Star History Chart](https://api.star-history.com/svg?repos=ModalMinds/MM-PRM&type=Date)](https://star-history.com/#ModalMinds/MM-PRM&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=ModalMinds/MM-EUREKA&type=Date)](https://star-history.com/#ModalMinds/MM-EUREKA&Date)
 
 ## 🤝 Contribution
 
